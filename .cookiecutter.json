@@ -1,0 +1,21 @@
+{
+  "_checkout": null,
+  "_output_dir": "C:\\Users\\parke\\repositories",
+  "_repo_dir": "C:\\Users\\parke\\.cookiecutters\\cookiecutter-neopy",
+  "_template": "gh:regulad/cookiecutter-neopy",
+  "author": "Parker Wahle",
+  "copyright_year": "2024",
+  "description": "MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it",
+  "development_status": "Development Status :: 1 - Planning",
+  "email": "regulad@regulad.xyz",
+  "enforce_checks_on_creation": false,
+  "environ_prefix": "MIDIPHONE_",
+  "friendly_name": "MIDIPhone",
+  "github_user": "regulad",
+  "initialize_git": true,
+  "license": "GPL-3.0",
+  "line_length": "100",
+  "package_name": "midiphone",
+  "project_name": "midiphone",
+  "version": "0.1.0"
+}
