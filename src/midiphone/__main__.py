@@ -207,7 +207,10 @@ class MicrophoneToMidiThread(Thread):
 
     def run(self):
         while not self.should_die:
-            self.read_one_frame()
+            try:
+                self.read_one_frame()
+            except Exception as e:
+                logging.exception(e)
 
 
 def create_window(config: Shelf) -> tk.Tk:
