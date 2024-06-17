@@ -22,4 +22,3 @@ from __future__ import annotations
 
 # flake8: noqa
 # isort: skip_file
-

@@ -20,6 +20,11 @@ python = "^3.11,<3.13"  # 3.13 is planned to make sweeping changes
 typer = {version = "^0.9.0", extras = ["all"]}
 typing-extensions = "^4.7.1"
 importlib-metadata = "^6.8.0"
+pyaudio = "^0.2.14"
+pytemidi = "^0.0.5"
+rtmidi = "^2.5.0"
+scipy = "^1.13.1"
+mido = "^1.3.2"
 
 [tool.poetry.dev-dependencies]
 Pygments = ">=2.10.0"

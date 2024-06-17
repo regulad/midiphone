@@ -25,7 +25,8 @@
 
 ## Requirements
 
-- TODO
+- https://www.tobias-erichsen.de/software/loopmidi.html
+- Recommended to test your output: https://hautetechnique.com/midi/midiview/#download
 
 ## Installation
 
