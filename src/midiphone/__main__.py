@@ -1,4 +1,4 @@
-"""CLI for MIDIPhone - MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it.
+"""CLI for MIDIPhone - Reconstruct MIDI notes over a virtual device from a live audio stream.
 
 Copyright (C) 2024  Parker Wahle
 
@@ -18,18 +18,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
-import json
 import logging
-from threading import Thread
+import os
+import shelve
 import tkinter as tk
+from pathlib import Path
+from shelve import Shelf
+from threading import Thread
 from typing import Callable
 
 import numpy as np
 import pyaudio
 import scipy
+import typer
 from mido import Message as MidiMessage
 from pytemidi import Device as MidiDevice
-import typer
 from rich.logging import RichHandler
 
 from ._metadata import __title__
@@ -47,18 +50,18 @@ MIDI_NOTE_MIN = 21
 MIDI_NOTE_MAX = 108
 
 # maximum magnitude of the fft output
-MAX_MAGNITUDE = 4_000_000
+MAX_MAGNITUDE = 4_000_000  # somewhat arbitrarily chosen
 
 
-def midi_note_for_frequency(frequency: np.float64) -> int:
-    return int(69 + 12 * np.log2(frequency / 440))
+def get_midi_note_for_frequency(frequency: np.float64) -> int:
+    return int(round(69 + 12 * np.log2(frequency / 440), 0))
 
 
-def frequency_for_midi_note(note: int) -> float:
+def get_frequency_for_midi_note(note: int) -> float:
     return 440 * 2 ** ((note - 69) / 12)
 
 
-def midi_note_to_note_name(note: int) -> str:
+def get_note_name_for_midi_note(note: int) -> str:
     """
     Convert a MIDI note to a note name.
     """
@@ -84,26 +87,34 @@ def seconds_to_frames(seconds: float) -> int:
 
 
 class MicrophoneToMidiThread(Thread):
-    def __init__(self, midi_device: MidiDevice, pyaudio_stream: pyaudio.Stream,
+    def __init__(self, midi_device: MidiDevice, pyaudio_stream: pyaudio.Stream, config: Shelf,
                  update_minimum_or_maximum_magnitude_callback: Callable[[], None] | None = None):
         super().__init__(daemon=True)
 
         self.should_die = False
+
+        self.config = config
 
         self.midi_device = midi_device
         self.pyaudio_stream = pyaudio_stream
         self.notes_on = set()
 
         self.should_listen_for_minimum_magnitude_frames = 0
-        self.minimum_magnitude = 0.0
+        self.minimum_magnitude = config.get("minimum_magnitude", 0.0)
         self.should_listen_for_maximum_magnitude_frames = 0
-        self.maximum_magnitude = 0.0
+        self.maximum_magnitude = config.get("maximum_magnitude", MAX_MAGNITUDE)
 
-        self.keyboard_has_velocity = False
-        self.velocity_threshold = 64
+        self.keyboard_has_velocity = config.get("keyboard_has_velocity", False)
+        self.velocity_threshold = config.get("velocity_threshold", 64)
 
         self.update_minimum_or_maximum_magnitude_callback: Callable[
                                                                [], None] | None = update_minimum_or_maximum_magnitude_callback
+
+    def write_config(self):
+        self.config["minimum_magnitude"] = self.minimum_magnitude
+        self.config["maximum_magnitude"] = self.maximum_magnitude
+        self.config["keyboard_has_velocity"] = self.keyboard_has_velocity
+        self.config["velocity_threshold"] = self.velocity_threshold
 
     def read_one_frame(self):
         audio_data = self.pyaudio_stream.read(PYAUDIO_CHUNK_SIZE)
@@ -128,6 +139,10 @@ class MicrophoneToMidiThread(Thread):
         # adjust sensitivity automatically
         minimum_magnitude_before = self.minimum_magnitude
         maximum_magnitude_before = self.maximum_magnitude
+        should_write_config = False
+        if self.should_listen_for_maximum_magnitude_frames == 1 or self.should_listen_for_minimum_magnitude_frames == 1:
+            # this is the last frame we should listen for
+            should_write_config = True
         if self.should_listen_for_minimum_magnitude_frames > 0:
             self.minimum_magnitude = np.max(yf_positive_magnitude)
             self.should_listen_for_minimum_magnitude_frames -= 1
@@ -137,6 +152,8 @@ class MicrophoneToMidiThread(Thread):
         if self.minimum_magnitude != minimum_magnitude_before or self.maximum_magnitude != maximum_magnitude_before:
             if self.update_minimum_or_maximum_magnitude_callback is not None:
                 self.update_minimum_or_maximum_magnitude_callback()
+        if should_write_config:
+            self.write_config()
 
         # find local maxima
         peaks, _ = scipy.signal.find_peaks(yf_positive_magnitude)
@@ -151,12 +168,13 @@ class MicrophoneToMidiThread(Thread):
             if magnitude < self.minimum_magnitude:
                 continue
 
-            note = midi_note_for_frequency(frequency)
+            note = get_midi_note_for_frequency(frequency)
 
             if note > 127:
                 continue  # ignore notes above 127
 
-            velocity = int(127 * (magnitude - self.minimum_magnitude) / (self.maximum_magnitude - self.minimum_magnitude))
+            velocity = int(
+                127 * (magnitude - self.minimum_magnitude) / (self.maximum_magnitude - self.minimum_magnitude))
 
             if velocity < 0:
                 velocity = 0
@@ -176,7 +194,7 @@ class MicrophoneToMidiThread(Thread):
             midi_message = MidiMessage("note_on", note=note, velocity=velocity)
 
             self.midi_device.send(midi_message.bin())
-            logging.info(f"Note On: {midi_note_to_note_name(note)} ({note}), Velocity: {velocity}")
+            logging.info(f"Note On: {get_note_name_for_midi_note(note)} ({note}), Velocity: {velocity}")
 
             self.notes_on.add(note)
 
@@ -184,7 +202,7 @@ class MicrophoneToMidiThread(Thread):
         for note in notes_off:
             midi_message = MidiMessage("note_off", note=note, velocity=0)
             self.midi_device.send(midi_message.bin())
-            logging.info(f"Note Off: {midi_note_to_note_name(note)} ({note})")
+            logging.info(f"Note Off: {get_note_name_for_midi_note(note)} ({note})")
             self.notes_on.remove(note)
 
     def run(self):
@@ -192,8 +210,7 @@ class MicrophoneToMidiThread(Thread):
             self.read_one_frame()
 
 
-def create_window() -> tk.Tk:
-
+def create_window(config: Shelf) -> tk.Tk:
     window = tk.Tk()
     window.title(__title__)
 
@@ -218,7 +235,8 @@ def create_window() -> tk.Tk:
 
     # make a dropdown menu for the user to select the input device
     selected_device = tk.StringVar(window)
-    selected_device.set(pyaudio_devices[0][1])
+    last_selected_device = config.get("selected_device", 0)
+    selected_device.set(pyaudio_devices[last_selected_device][1])
     dropdown = tk.OptionMenu(window, selected_device, *[device[1] for device in pyaudio_devices])
     dropdown.pack()
 
@@ -228,6 +246,7 @@ def create_window() -> tk.Tk:
         nonlocal thread
         for device_index, device in pyaudio_devices:
             if device == selected_device.get():
+                config["selected_device"] = device_index
                 if thread is not None:
                     thread.should_die = True
                     thread.join()
@@ -245,15 +264,18 @@ def create_window() -> tk.Tk:
                     minimum_magnitude.set(thread.minimum_magnitude)
                     maximum_magnitude.set(thread.maximum_magnitude)
 
-                thread = MicrophoneToMidiThread(midiphone_midi_device, stream,
+                thread = MicrophoneToMidiThread(midiphone_midi_device, stream, config,
                                                 update_minimum_or_maximum_magnitude_callback)
                 thread.minimum_magnitude = minimum_magnitude.get()
                 thread.maximum_magnitude = maximum_magnitude.get()
                 thread.keyboard_has_velocity = keyboard_has_velocity.get()
                 thread.velocity_threshold = velocity_threshold.get()
+                thread.write_config()
                 thread.start()
                 update_status()
                 return
+
+    selected_device.trace_add("write", lambda _1, _2, _3: update_input_device_index())
 
     # add a button to update the input device
     button = tk.Button(window, text="Start/Restart", command=update_input_device_index)
@@ -272,10 +294,15 @@ def create_window() -> tk.Tk:
 
     # add a slider to adjust the minimum magnitude
     minimum_magnitude = tk.DoubleVar(window)
-    minimum_magnitude.trace_add("write", lambda _1, _2, _3: (
-        setattr(thread, "minimum_magnitude", minimum_magnitude.get()) if thread is not None else None))
+
+    def set_minimum_magnitude(*args) -> None:
+        if thread is not None:
+            thread.minimum_magnitude = minimum_magnitude.get()
+            thread.write_config()
+
+    minimum_magnitude.trace_add("write", set_minimum_magnitude)
     minimum_magnitude_frame = tk.Frame(window)
-    minimum_magnitude.set(0.0)
+    minimum_magnitude.set(config.get("minimum_magnitude", 0.0))
     minimum_magnitude_label = tk.Label(minimum_magnitude_frame, text="Minimum Magnitude")
     minimum_magnitude_label.pack()
     minimum_magnitude_slider_frame = tk.Frame(minimum_magnitude_frame)
@@ -283,12 +310,14 @@ def create_window() -> tk.Tk:
                                         variable=minimum_magnitude)
     minimum_magnitude_slider.pack()
     listen_for_minimum_magnitude = tk.Button(minimum_magnitude_slider_frame, text="Listen for Minimum Magnitude")
+
     def toggle_listen_for_minimum_magnitude():
         if thread is not None:
             if thread.should_listen_for_minimum_magnitude_frames > 0:
                 thread.should_listen_for_minimum_magnitude_frames = 0
             else:
                 thread.should_listen_for_minimum_magnitude_frames = seconds_to_frames(5)
+
     listen_for_minimum_magnitude.config(command=toggle_listen_for_minimum_magnitude)
     listen_for_minimum_magnitude.pack()
     minimum_magnitude_slider_frame.pack()
@@ -296,10 +325,15 @@ def create_window() -> tk.Tk:
 
     # add a slider to adjust the maximum magnitude
     maximum_magnitude = tk.DoubleVar(window)
-    maximum_magnitude.trace_add("write", lambda _1, _2, _3: (
-        setattr(thread, "maximum_magnitude", maximum_magnitude.get()) if thread is not None else None))
+
+    def set_maximum_magnitude(*args) -> None:
+        if thread is not None:
+            thread.maximum_magnitude = maximum_magnitude.get()
+            thread.write_config()
+
+    maximum_magnitude.trace_add("write", set_maximum_magnitude)
     maximum_magnitude_frame = tk.Frame(window)
-    maximum_magnitude.set(MAX_MAGNITUDE)
+    maximum_magnitude.set(config.get("maximum_magnitude", MAX_MAGNITUDE))
     maximum_magnitude_label = tk.Label(maximum_magnitude_frame, text="Maximum Magnitude")
     maximum_magnitude_label.pack()
     maximum_magnitude_slider_frame = tk.Frame(maximum_magnitude_frame)
@@ -307,12 +341,14 @@ def create_window() -> tk.Tk:
                                         variable=maximum_magnitude)
     maximum_magnitude_slider.pack()
     listen_for_maximum_magnitude = tk.Button(maximum_magnitude_slider_frame, text="Listen for Maximum Magnitude")
-    def toggle_listen_for_maximum_magnitude():
+
+    def toggle_listen_for_maximum_magnitude() -> None:
         if thread is not None:
             if thread.should_listen_for_maximum_magnitude_frames > 0:
                 thread.should_listen_for_maximum_magnitude_frames = 0
             else:
                 thread.should_listen_for_maximum_magnitude_frames = seconds_to_frames(5)
+
     listen_for_maximum_magnitude.config(command=toggle_listen_for_maximum_magnitude)
     listen_for_maximum_magnitude.pack()
     maximum_magnitude_slider_frame.pack()
@@ -320,8 +356,14 @@ def create_window() -> tk.Tk:
 
     # add a checkbox to enable velocity
     keyboard_has_velocity = tk.BooleanVar(window)
-    keyboard_has_velocity.set(False)
-    keyboard_has_velocity.trace_add("write", lambda _1, _2, _3: (setattr(thread, "keyboard_has_velocity", keyboard_has_velocity.get()) if thread is not None else None))
+    keyboard_has_velocity.set(config.get("keyboard_has_velocity", False))
+
+    def toggle_keyboard_has_velocity(*args) -> None:
+        if thread is not None:
+            thread.keyboard_has_velocity = keyboard_has_velocity.get()
+            thread.write_config()
+
+    keyboard_has_velocity.trace_add("write", toggle_keyboard_has_velocity)
     keyboard_has_velocity_frame = tk.Frame(window)
     keyboard_has_velocity_label = tk.Label(keyboard_has_velocity_frame, text="Keyboard Has Velocity")
     keyboard_has_velocity_label.pack(side=tk.LEFT)
@@ -331,9 +373,15 @@ def create_window() -> tk.Tk:
 
     # add a slider to adjust the velocity threshold
     velocity_threshold = tk.IntVar(window)
-    velocity_threshold.trace_add("write", lambda _1, _2, _3: (setattr(thread, "velocity_threshold", velocity_threshold.get()) if thread is not None else None))
+
+    def set_velocity_threshold(*args) -> None:
+        if thread is not None:
+            thread.velocity_threshold = velocity_threshold.get()
+            thread.write_config()
+
+    velocity_threshold.trace_add("write", set_velocity_threshold)
     velocity_threshold_frame = tk.Frame(window)
-    velocity_threshold.set(64)
+    velocity_threshold.set(config.get("velocity_threshold", 64))
     velocity_threshold_label = tk.Label(velocity_threshold_frame, text="Velocity Threshold")
     velocity_threshold_label.pack()
     velocity_threshold_slider_frame = tk.Frame(velocity_threshold_frame)
@@ -347,9 +395,18 @@ def create_window() -> tk.Tk:
 
 @cli.command()
 def main() -> None:
+    # only works on Windows
+    if os.name != "nt":
+        raise NotImplementedError("This program only works on Windows.")
+
     logging.basicConfig(handlers=(RichHandler(),), level=logging.INFO)
-    window = create_window()
-    window.mainloop()
+
+    config_path = Path(os.getenv("APPDATA")) / __title__
+    config_path.mkdir(exist_ok=True)
+
+    with shelve.open(str(config_path / "config")) as config:
+        window = create_window(config)
+        window.mainloop()
 
 
 if __name__ == "__main__":  # pragma: no cover

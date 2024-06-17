@@ -251,7 +251,7 @@ def docs(session: Session) -> None:
 @session(python=python_versions[0])
 def pyinstaller(session: Session) -> None:
     """Build the executable."""
-    session.install(".")
+    session.install(".")  # installs all dependencies
     session.install("pyinstaller")
 
     args: list[str] = []
@@ -267,5 +267,11 @@ def pyinstaller(session: Session) -> None:
     args.append("--clean")
 
     args.append("--noconfirm")
+
+    args.append("--noconsole")
+
+    session.install("setuptools")
+    args.append("--hidden-import=pkg_resources")
+    args.append("--hidden-import=pkg_resources.extern")
 
     session.run("pyinstaller", *args, str(Path("src", "launcher.py")))

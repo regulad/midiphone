@@ -1,4 +1,4 @@
-"""Metadata for MIDIPhone - MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it.
+"""Metadata for MIDIPhone - Reconstruct MIDI notes over a virtual device from a live audio stream.
 
 Copyright (C) 2024  Parker Wahle
 
@@ -47,7 +47,7 @@ except PackageNotFoundError:  # pragma: no cover
     logger.debug("Falling back to static metadata.")
     __uri__ = ""
     __title__ = "MIDIPhone"
-    __summary__ = "MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it"
+    __summary__ = "Reconstruct MIDI notes over a virtual device from a live audio stream"
     __license__ = "GPL-3.0"
     __version__ = "0.0.0"
     __author__ = "Parker Wahle"

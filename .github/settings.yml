@@ -7,7 +7,7 @@ repository:
   name: "midiphone"
 
   # A short description of the repository that will show up on GitHub
-  description: "MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it"
+  description: "Reconstruct MIDI notes over a virtual device from a live audio stream"
 
   # A URL with more information about the repository
   homepage: "https://midiphone.readthedocs.io/"

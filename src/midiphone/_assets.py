@@ -1,4 +1,4 @@
-"""Asset utilities for MIDIPhone - MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it.
+"""Asset utilities for MIDIPhone - Reconstruct MIDI notes over a virtual device from a live audio stream.
 
 Copyright (C) 2024  Parker Wahle
 

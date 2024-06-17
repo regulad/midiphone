@@ -19,16 +19,26 @@
 [pre-commit]: https://github.com/pre-commit/pre-commit
 [black]: https://github.com/psf/black
 
+![IMG_1970.mov](IMG_1970.mov)
+
 ## Features
 
-- TODO
+- Reconstruct a MIDI port from an audio input
+- Buttons to help adjust sensitivity
+- Saved config between sessions
 
 ## Requirements
 
 - https://www.tobias-erichsen.de/software/loopmidi.html
-- Recommended to test your output: https://hautetechnique.com/midi/midiview/#download
+- Some way to get your piano's audio into your computer (line in preferred)
+- Python 3.11+
+- Windows 10+ (for now; other OSes possibly added later)
+- A sine wave voice on your piano (or a similar sound) (optional; but works best with it)
+  - My Yamaha PSR-E253 has a Sine wave on Voice 193, works well from C4-C5; iffy in other octaves
 
 ## Installation
+
+#### EXE is on Releases page; you can use that if you don't want to install Python
 
 You can install _MIDIPhone_ via [pip] from [PyPI]:
 

@@ -1,4 +1,4 @@
-"""MIDIPhone - MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it.
+"""MIDIPhone - Reconstruct MIDI notes over a virtual device from a live audio stream.
 
 Copyright (C) 2024  Parker Wahle
 

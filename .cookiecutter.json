@@ -5,7 +5,7 @@
   "_template": "gh:regulad/cookiecutter-neopy",
   "author": "Parker Wahle",
   "copyright_year": "2024",
-  "description": "MIDIPhone uses your microphone to pick up the sound of an instrument and creates a virtual MIDI device with it",
+  "description": "Reconstruct MIDI notes over a virtual device from a live audio stream",
   "development_status": "Development Status :: 1 - Planning",
   "email": "regulad@regulad.xyz",
   "enforce_checks_on_creation": false,
