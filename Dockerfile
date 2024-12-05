@@ -1,7 +1,7 @@
 # https://stackoverflow.com/questions/53835198/integrating-python-poetry-with-docker/54763270#54763270
 # Copyright (c) 2023  Parker Wahle - Licensed under MIT License (do whatever you want)
 
-FROM python:3.11.4-alpine3.18 AS base
+FROM python:3.12.3-alpine3.18 AS base
 
 # In Python, the line between a compile-time and run-time dependency is blurry,
 # so we play it safe by installing everything
